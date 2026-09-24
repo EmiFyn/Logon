@@ -137,6 +137,22 @@ button.small {
 
 input[readonly] { background: var(--green-light); color: var(--muted); }
 
+/* Today / Tomorrow. A crew logging the next day's work at eight in the evening is the
+   normal case for standby and early starts, so it is two taps rather than a date
+   picker - and the day is written out in words underneath, because "24/09" on a phone
+   at dusk is exactly how somebody logs the wrong day. */
+.daypick { display: flex; gap: 8px; align-items: stretch; }
+.daypick .day {
+  flex: 0 0 auto; font: inherit; font-size: 15px; font-weight: 600;
+  padding: 0 14px; border-radius: var(--radius);
+  border: 1px solid var(--line); background: #fff; color: var(--green);
+}
+.daypick .day[aria-pressed="true"] {
+  background: var(--green); border-color: var(--green); color: #fff;
+}
+.daypick input { flex: 1 1 auto; min-width: 0; margin: 0; }
+.hint.ahead { color: var(--amber); font-weight: 600; }
+
 button.primary {
   width: 100%; margin: 26px 0 0; padding: 16px;
   background: var(--green); color: #fff; border: 0; border-radius: var(--radius);
@@ -164,6 +180,12 @@ button.link.danger { color: var(--red); }
   margin: 20px 0 0; padding: 12px 14px; border-radius: var(--radius);
   background: #fdf3e3; border: 1px solid #e8d3a8; color: var(--amber); font-size: 15px;
 }
+
+.remind { margin-top: 30px; }
+.remind h2 { font-size: 14px; color: var(--muted); text-transform: uppercase;
+             letter-spacing: .04em; margin-bottom: 8px; }
+.remind p { margin: 0 0 10px; font-size: 15px; color: var(--muted); }
+.remind p.on { color: var(--green); font-weight: 600; }
 
 #recent { margin-top: 30px; }
 #recent h2 { font-size: 14px; color: var(--muted); text-transform: uppercase;

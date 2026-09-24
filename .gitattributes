@@ -1,0 +1,4 @@
+# Served as stored. Windows checkouts otherwise convert line endings and warn about
+# every file, which reads like a fault and is not one.
+* text=auto eol=lf
+*.png binary
