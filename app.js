@@ -18,7 +18,7 @@
   // your Worker and nothing else, so that replacing the project files can never
   // overwrite it - which is exactly how a working installation once ended up pointed
   // at a hostname that did not exist.
-  const APP_VERSION = '1.5.0';
+  const APP_VERSION = '1.6.0';
 
   const CFG = window.WA_CONFIG || {};
 
@@ -167,6 +167,7 @@
   const outboxDelete = (id) => tx(OUTBOX, 'readwrite', (s) => s.delete(id));
   const outboxAll = () => tx(OUTBOX, 'readonly', (s) => s.getAll()).then((r) => r || []);
   const metaSet = (k, v) => tx(META, 'readwrite', (s) => s.put({ k, v }));
+  const metaGet = (k) => tx(META, 'readonly', (s) => s.get(k)).then((r) => (r ? r.v : null));
   const lookupGet = (key) => tx(LOOKUPS, 'readonly', (s) => s.get(key));
   const lookupPut = (rec) => tx(LOOKUPS, 'readwrite', (s) => s.put(rec));
   const lookupClear = () => tx(LOOKUPS, 'readwrite', (s) => s.clear());
@@ -274,6 +275,163 @@
         || ('The server answered ' + res.status + ' with nothing to explain it.'));
     }
     return data;
+  }
+
+  // ------------------------------------------------------------------ next week
+  //
+  // A plan is not a logon and is not treated as one. It says where a gang expects to
+  // be, per day, and the coverage figures never look at it. It asks for less, too: a
+  // CMR, a circuit and a work type, with the functional location optional, because a
+  // week is planned by circuit rather than by pole.
+  //
+  // It is filled in with no signal as readily as with it - the CMR list is whatever
+  // the phone already has, and the whole week queues like a logon.
+
+  let weekDays = [];        // the dates being planned
+  let weekPlan = {};        // date -> what has been entered
+  let weekMonday = '';
+  let weekLoaded = false;
+  // Every CMR on the network, not just the ones on whichever voltage the logon form
+  // happens to be set to. The week ahead is planned by CMR and the voltage is never
+  // asked for, so the two lists cannot be the same one.
+  let weekCmrs = [];
+
+  const dayName = (iso) => {
+    const [y, m, d] = iso.split('-').map(Number);
+    return DAY_NAMES[new Date(y, m - 1, d, 12).getDay()];
+  };
+
+  const isWeekendDay = (iso) => {
+    const [y, m, d] = iso.split('-').map(Number);
+    const wd = new Date(y, m - 1, d, 12).getDay();
+    return wd === 0 || wd === 6;
+  };
+
+  async function loadWeek(force) {
+    if (weekLoaded && !force) return;
+    // Work the dates out here only as a fallback. The server decides which week is
+    // "next", because a handset with the wrong date set would otherwise plan the
+    // wrong one and nobody would be able to tell.
+    const monday = dayOffset(8 - (new Date().getDay() || 7));
+    weekMonday = monday;
+    weekDays = Array.from({ length: 7 }, (_, i) => {
+      const [y, m, d] = monday.split('-').map(Number);
+      const t = new Date(y, m - 1, d, 12);
+      t.setDate(t.getDate() + i);
+      return localDate(t);
+    });
+
+    try {
+      const [res, cmrs] = await Promise.all([
+        api('/api/plan?week=next'),
+        api('/api/lookup/cmrs'),
+      ]);
+      weekMonday = res.monday;
+      weekDays = res.days;
+      weekCmrs = (cmrs.cmrs || []).map((c) => c.cmr);
+      weekPlan = {};
+      for (const row of res.plan || []) weekPlan[row.work_date] = row;
+      await metaSet('plan', { monday: weekMonday, days: weekDays, plan: weekPlan,
+                              cmrs: weekCmrs });
+    } catch {
+      // No signal. Whatever was last seen is better than an empty week.
+      const kept = await metaGet('plan');
+      if (kept && kept.monday === weekMonday) {
+        weekDays = kept.days;
+        weekPlan = kept.plan || {};
+        weekCmrs = kept.cmrs || [];
+      }
+    }
+    weekLoaded = true;
+    renderWeek();
+  }
+
+  function renderWeek() {
+    const box = $('week-days');
+    const types = lists.work_types.map(typeName).filter(Boolean);
+    const cmrs = weekCmrs;
+
+    box.innerHTML = weekDays.map((iso) => {
+      const has = weekPlan[iso] || {};
+      const filled = !!has.work_type;
+      return '<div class="day' + (isWeekendDay(iso) ? ' weekend' : '')
+        + (filled ? ' filled' : '') + '" data-day="' + iso + '">'
+        + '<h3>' + esc(dayName(iso))
+        + ' <span class="date">' + esc(iso.slice(8) + '/' + iso.slice(5, 7)) + '</span></h3>'
+        + '<label>Work type</label>'
+        + '<select data-f="work_type">' + option('', 'Nothing planned', !has.work_type)
+        + types.map((t) => option(t, t, has.work_type === t)).join('') + '</select>'
+        + '<label>CMR</label>'
+        + '<select data-f="cmr">' + option('', 'Choose...', !has.cmr)
+        + cmrs.map((c) => option(c, c, has.cmr === c)).join('')
+        + (has.cmr && !cmrs.includes(has.cmr) ? option(has.cmr, has.cmr, true) : '')
+        + '</select>'
+        + '<label>Circuit</label>'
+        + '<input data-f="circuit" list="circuits-' + esc(iso) + '" '
+        + 'value="' + esc(has.circuit || '') + '" autocapitalize="characters" '
+        + 'autocomplete="off" spellcheck="false">'
+        + '<datalist id="circuits-' + esc(iso) + '"></datalist>'
+        + '<label>Functional location <span class="date">(optional)</span></label>'
+        + '<input data-f="functional_location" value="' + esc(has.functional_location || '')
+        + '" autocapitalize="characters" autocomplete="off" spellcheck="false">'
+        + '</div>';
+    }).join('');
+
+    for (const iso of weekDays) fillCircuits(iso);
+    $('week-title').textContent = 'Week beginning ' + inWords(weekMonday);
+  }
+
+  const option = (value, label, selected) => '<option value="' + esc(value) + '"'
+    + (selected ? ' selected' : '') + '>' + esc(label) + '</option>';
+
+  /** The circuits on whichever CMR that day is set to, offered as suggestions. */
+  async function fillCircuits(iso) {
+    const card = document.querySelector('[data-day="' + iso + '"]');
+    if (!card) return;
+    const cmr = card.querySelector('[data-f="cmr"]').value;
+    const list = card.querySelector('datalist');
+    if (!cmr) { list.innerHTML = ''; return; }
+    try {
+      const res = await api('/api/lookup/circuits?cmr=' + encodeURIComponent(cmr));
+      list.innerHTML = (res.circuits || []).map((c) => '<option value="' + esc(c) + '">').join('');
+    } catch {
+      list.innerHTML = '';     // no signal; typing still works
+    }
+  }
+
+  function readWeek() {
+    return weekDays.map((iso) => {
+      const card = document.querySelector('[data-day="' + iso + '"]');
+      const field = (f) => (card.querySelector('[data-f="' + f + '"]') || {}).value || '';
+      return {
+        work_date: iso,
+        work_type: field('work_type'),
+        cmr: field('cmr'),
+        circuit: field('circuit').trim().toUpperCase(),
+        functional_location: field('functional_location').trim().toUpperCase(),
+        area: areaForCmr(field('cmr')),
+      };
+    });
+  }
+
+  async function saveWeek() {
+    const days = readWeek();
+    const planned = days.filter((d) => d.work_type).length;
+    try {
+      await api('/api/plan', { method: 'POST', body: JSON.stringify({ days }) });
+      weekPlan = {};
+      for (const d of days) if (d.work_type) weekPlan[d.work_date] = d;
+      await metaSet('plan', { monday: weekMonday, days: weekDays, plan: weekPlan });
+      $('week-state').textContent = planned
+        ? planned + (planned === 1 ? ' day' : ' days') + ' saved. The office can see it.'
+        : 'Saved - nothing planned yet.';
+      $('week-state').classList.add('saved');
+      renderWeek();
+    } catch (e) {
+      $('week-state').classList.remove('saved');
+      $('week-state').textContent = 'Could not save: ' + e.message
+        + ' Try again when you have signal - nothing has been lost from the screen.';
+    }
   }
 
   // ------------------------------------------------------------------ reminders
@@ -481,6 +639,8 @@
     store.del(KEY_TOKEN); store.del(KEY_USER); store.del(KEY_LISTS);
     token = ''; user = null;
     lists = { operatives: [], work_types: [], voltages: [], lookup_version: '0' };
+    weekLoaded = false;
+    weekPlan = {};
     metaSet('auth', { token: '', api: API }).catch(() => {});
     show('login');
     if (why) $('login-msg').innerHTML = '<div class="msg err">' + esc(why) + '</div>';
@@ -877,8 +1037,15 @@
     $('fl-matches').hidden = true;
   });
 
-  function areaForCmr() {
-    const hit = cmrsForVoltage.find((r) => r.cmr === $('cmr').value);
+  /** Which circuit a functional location sits on, if the lookup knows. */
+  function circuitForFl(fl) {
+    const hit = locations.find((l) => l.fl === fl);
+    return (hit && hit.circuit) || '';
+  }
+
+  function areaForCmr(which) {
+    const cmr = which === undefined ? $('cmr').value : which;
+    const hit = cmrsForVoltage.find((r) => r.cmr === cmr);
     return hit && hit.area ? hit.area : '';
   }
 
@@ -886,6 +1053,33 @@
   // Once is enough - ensureReminders() does nothing on every tap after it.
   $('view-main').addEventListener('pointerdown', () => { ensureReminders(); },
     { once: true });
+
+  // --- the two halves of the screen ---------------------------------------
+  function showTab(which) {
+    const week = which === 'week';
+    $('tab-today').setAttribute('aria-pressed', String(!week));
+    $('tab-week').setAttribute('aria-pressed', String(week));
+    $('logon-form').hidden = week;
+    $('outbox').hidden = week || !$('outbox').textContent;
+    $('recent').hidden = week;
+    // The reminders note belongs with the day's work, not with next week's plan.
+    $('remind').hidden = week || !$('remind-state').textContent;
+    $('week').hidden = !week;
+    if (week) loadWeek(false);
+  }
+
+  $('tab-today').addEventListener('click', () => showTab('today'));
+  $('tab-week').addEventListener('click', () => showTab('week'));
+  $('week-save').addEventListener('click', saveWeek);
+
+  // A day's circuit list follows that day's CMR.
+  $('week-days').addEventListener('change', (e) => {
+    const card = e.target.closest('[data-day]');
+    if (!card) return;
+    if (e.target.dataset.f === 'cmr') fillCircuits(card.dataset.day);
+    card.classList.toggle('filled',
+      !!card.querySelector('[data-f="work_type"]').value);
+  });
 
   $('work-type').addEventListener('change', renderWorkDetail);
   $('work-detail').addEventListener('change', async () => {
@@ -942,6 +1136,10 @@
       cmr: $('cmr').value,
       functional_location: $('fl').value.trim().toUpperCase(),
       area: $('area').value || areaForCmr(),
+      // Taken from the location rather than asked for. A logon is already long enough,
+      // and the board wants the circuit so a day's work can be lined up against the
+      // week that was planned for it.
+      circuit: circuitForFl($('fl').value.trim().toUpperCase()),
       work_type: $('work-type').value,
       work_detail: needsDetail ? $('work-detail').value : '',
       notes: $('notes').value.trim(),
@@ -1087,6 +1285,8 @@
     drawNet();
     await drawOutbox();
     drawRemind().catch(() => {});
+    weekLoaded = false;
+    showTab('today');
     refreshLists(true);
     loadRecent();
     flush();

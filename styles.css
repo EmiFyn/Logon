@@ -216,6 +216,41 @@ button.link.danger { color: var(--red); }
   background: #fdf3e3; border: 1px solid #e8d3a8; color: var(--amber); font-size: 15px;
 }
 
+/* Today / Next week. Two jobs on one screen, and a crew only ever wants one of them
+   at a time, so the other is put away rather than scrolled past. */
+.tabs { display: flex; gap: 8px; margin: 0 0 18px; }
+.tabs .tab {
+  flex: 1 1 0; font: inherit; font-size: 16px; font-weight: 600; padding: 11px 8px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: #fff; color: var(--green);
+}
+.tabs .tab[aria-pressed="true"] {
+  background: var(--green); border-color: var(--green); color: #fff;
+}
+
+/* One card per day of the week ahead. */
+.day {
+  border: 1px solid var(--line); border-radius: var(--radius); background: #fff;
+  padding: 12px 14px; margin-bottom: 10px;
+}
+.day.weekend { background: var(--bg); }
+.day > h3 {
+  margin: 0 0 8px; font-size: 16px; display: flex; align-items: baseline; gap: 8px;
+}
+.day > h3 .date { color: var(--muted); font-weight: 400; font-size: 14px; }
+.day label { margin-top: 8px; font-size: 14px; }
+.day select, .day input { margin-top: 2px; }
+.day .clear { margin-top: 4px; }
+.day.filled { border-left: 4px solid var(--green); }
+
+#week h2 {
+  font-size: 14px; color: var(--muted); text-transform: uppercase;
+  letter-spacing: .04em; margin: 0 0 8px;
+}
+#week > .hint { margin-bottom: 16px; }
+#week-state { min-height: 1.4em; }
+#week-state.saved { color: var(--green); font-weight: 600; }
+
 .remind { margin-top: 30px; }
 .remind h2 { font-size: 14px; color: var(--muted); text-transform: uppercase;
              letter-spacing: .04em; margin-bottom: 8px; }

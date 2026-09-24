@@ -58,6 +58,11 @@
 
   <div id="net" class="banner" hidden></div>
 
+  <nav class="tabs">
+    <button type="button" id="tab-today" class="tab" aria-pressed="true">Today</button>
+    <button type="button" id="tab-week" class="tab" aria-pressed="false">Next week</button>
+  </nav>
+
   <form id="logon-form">
     <label for="work-date">Date</label>
     <div class="daypick">
@@ -109,6 +114,20 @@
   <section id="remind" class="remind" hidden>
     <h2>Reminders</h2>
     <p id="remind-state"></p>
+  </section>
+
+  <!-- Next week, as the gang expects it to go. Deliberately less than a logon asks
+       for: a CMR, a circuit and a work type, because next week is planned by circuit
+       rather than by pole and nobody knows on Friday which span they will be on. -->
+  <section id="week" hidden>
+    <h2 id="week-title">Next week</h2>
+    <p class="hint" id="week-hint">
+      Where your gang expects to be. A rough plan is worth more than a blank week -
+      it can be changed any time before the day, and it is never treated as a logon.
+    </p>
+    <div id="week-days"></div>
+    <button class="primary" type="button" id="week-save">Save next week</button>
+    <p class="hint" id="week-state"></p>
   </section>
 
   <section id="recent">

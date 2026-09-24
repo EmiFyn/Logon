@@ -8,7 +8,7 @@
  * old copy. That is the one piece of housekeeping this file needs.
  */
 
-const CACHE = 'whereabouts-v8';
+const CACHE = 'whereabouts-v9';
 
 const SHELL = [
   './',
