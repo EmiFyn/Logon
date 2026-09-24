@@ -23,73 +23,6 @@
   const MAX_MATCHES = 60;
 
   const $ = (id) => document.getElementById(id);
-
-  // ------------------------------------------------------------------ the day
-  //
-  // Crews on standby and early starts fill this in the night before, so the form has
-  // to offer tomorrow without making anybody drive a date picker in the dark. After
-  // five it opens on tomorrow by itself, on the reasoning that somebody filling it in
-  // the evening is planning, not reporting - and it says which day it means in words
-  // either way, so an assumption is never silent.
-  const EVENING_FROM = 17;   // 5pm
-
-  const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday',
-                     'Saturday'];
-  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
-                  'August', 'September', 'October', 'November', 'December'];
-
-  const localDate = (d) => [
-    d.getFullYear(),
-    String(d.getMonth() + 1).padStart(2, '0'),
-    String(d.getDate()).padStart(2, '0'),
-  ].join('-');
-
-  function dayOffset(days) {
-    const d = new Date();
-    d.setHours(12, 0, 0, 0);          // midday, so a clock change cannot shift the day
-    d.setDate(d.getDate() + days);
-    return localDate(d);
-  }
-
-  function inWords(iso) {
-    const [y, m, d] = iso.split('-').map(Number);
-    const when = new Date(y, m - 1, d, 12);
-    return DAY_NAMES[when.getDay()] + ' ' + d + ' ' + MONTHS[m - 1];
-  }
-
-  function drawDay() {
-    const value = $('work-date').value;
-    const today = dayOffset(0);
-    const tomorrow = dayOffset(1);
-    $('day-today').setAttribute('aria-pressed', String(value === today));
-    $('day-tomorrow').setAttribute('aria-pressed', String(value === tomorrow));
-
-    const hint = $('day-hint');
-    hint.classList.toggle('ahead', value === tomorrow);
-    if (!value) hint.textContent = '';
-    else if (value === today) hint.textContent = 'Today, ' + inWords(value) + '.';
-    else if (value === tomorrow) {
-      hint.textContent = 'This logon is for TOMORROW, ' + inWords(value) + '.';
-    } else if (value > tomorrow) {
-      hint.textContent = inWords(value)
-        + ' - further ahead than tomorrow, which will not be accepted.';
-      hint.classList.add('ahead');
-    } else {
-      hint.textContent = inWords(value) + ' - a day that has already passed.';
-      hint.classList.add('ahead');
-    }
-  }
-
-  function setDay(iso) {
-    $('work-date').value = iso;
-    drawDay();
-  }
-
-  /** Today, or tomorrow if it is already evening. */
-  function openingDay() {
-    return dayOffset(new Date().getHours() >= EVENING_FROM ? 1 : 0);
-  }
-
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g,
     (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -196,113 +129,6 @@
     if (res.status === 401) { signOut('Your access was removed. Sign in again.'); throw new Error('Signed out'); }
     if (!res.ok) throw new Error((data && data.error) || ('Error ' + res.status));
     return data;
-  }
-
-  // ------------------------------------------------------------------ reminders
-  //
-  // If the crew has not logged on by the time the office sets, the handset buzzes. It
-  // is opt-in per phone and per person: a notification nobody asked for is the fastest
-  // way to have every crew turn notifications off for good.
-  //
-  // The awkward part is iPhones. Safari only allows this once the app has been added
-  // to the Home Screen, and there is no way to ask for that on the user's behalf - so
-  // the honest thing is to say so plainly rather than show a button that does nothing.
-
-  const pushSupported = () => 'serviceWorker' in navigator
-    && 'PushManager' in window && 'Notification' in window;
-
-  const onHomeScreen = () => window.matchMedia('(display-mode: standalone)').matches
-    || window.navigator.standalone === true;
-
-  const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent)
-    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-
-  const b64ToBytes = (s2) => {
-    const pad = s2.replace(/-/g, '+').replace(/_/g, '/');
-    const raw = atob(pad + '='.repeat((4 - (pad.length % 4)) % 4));
-    return Uint8Array.from(raw, (c) => c.charCodeAt(0));
-  };
-
-  async function currentSub() {
-    if (!pushSupported()) return null;
-    const reg = await navigator.serviceWorker.ready;
-    return reg.pushManager.getSubscription();
-  }
-
-  async function drawRemind() {
-    const box = $('remind');
-    const state = $('remind-state');
-    const on = $('remind-on');
-    const off = $('remind-off');
-    box.hidden = false;
-
-    if (!pushSupported() || (isIOS() && !onHomeScreen())) {
-      on.hidden = true;
-      off.hidden = true;
-      state.classList.remove('on');
-      state.textContent = isIOS()
-        ? 'To get a reminder on an iPhone, the app has to be added to the Home Screen '
-          + 'first: tap Share, then "Add to Home Screen", and open it from there.'
-        : 'This phone cannot show reminders.';
-      return;
-    }
-
-    const sub = await currentSub();
-    if (sub && Notification.permission === 'granted') {
-      state.classList.add('on');
-      state.textContent = 'This phone will buzz if your crew has not logged on by the '
-        + 'time the office has set.';
-      on.hidden = true;
-      off.hidden = false;
-      return;
-    }
-
-    state.classList.remove('on');
-    on.hidden = false;
-    off.hidden = true;
-    state.textContent = Notification.permission === 'denied'
-      ? 'Reminders are blocked for this app in the phone\'s settings. Turning them back '
-        + 'on there is the only way to change it.'
-      : 'Get a reminder if your crew has not logged on by the time the office has set.';
-    on.disabled = Notification.permission === 'denied';
-  }
-
-  async function remindOn() {
-    try {
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') { await drawRemind(); return; }
-
-      const { key } = await api('/api/push/key');
-      const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: b64ToBytes(key),
-      });
-      await api('/api/push/subscribe', {
-        method: 'POST',
-        body: JSON.stringify({ endpoint: sub.endpoint, label: navigator.platform || 'Phone' }),
-      });
-      toast('This phone will be reminded');
-    } catch (e) {
-      toast(e.message || 'Could not turn reminders on', true);
-    }
-    await drawRemind();
-  }
-
-  async function remindOff() {
-    try {
-      const sub = await currentSub();
-      if (sub) {
-        await api('/api/push/unsubscribe', {
-          method: 'POST', body: JSON.stringify({ endpoint: sub.endpoint }),
-        }).catch(() => {});
-        await sub.unsubscribe();
-      }
-      toast('Reminders off for this phone');
-    } catch {
-      toast('Could not turn reminders off', true);
-    }
-    await drawRemind();
   }
 
   // ------------------------------------------------------------------ views
@@ -710,13 +536,6 @@
     return hit && hit.area ? hit.area : '';
   }
 
-  $('remind-on').addEventListener('click', remindOn);
-  $('remind-off').addEventListener('click', remindOff);
-
-  $('day-today').addEventListener('click', () => setDay(dayOffset(0)));
-  $('day-tomorrow').addEventListener('click', () => setDay(dayOffset(1)));
-  $('work-date').addEventListener('change', drawDay);
-
   $('add-other').addEventListener('click', () => {
     const n = prompt('Name of the person on site:');
     if (n && n.trim()) { extraPeople.push(n.trim()); renderCrew(); }
@@ -734,13 +553,6 @@
     }));
     if (!people.length) { toast('Tick at least one person', true); return; }
     if (!$('work-type').value) { toast('Choose a work type', true); return; }
-
-    const chosen = $('work-date').value;
-    if (!chosen) { toast('Pick the day this is for', true); return; }
-    if (chosen > dayOffset(1)) {
-      toast('You can only log on for today or tomorrow', true);
-      return;
-    }
 
     const item = {
       id: uuid(),
@@ -880,11 +692,7 @@
   async function afterSignIn() {
     show('main');
     await metaSet('auth', { token, api: API });
-    // The picker itself stops at tomorrow. The check below the form repeats it, because
-    // a date typed straight into the box gets past the picker on some Androids.
-    $('work-date').max = dayOffset(1);
-    $('work-date').min = dayOffset(-31);
-    setDay(openingDay());
+    $('work-date').value = new Date().toISOString().slice(0, 10);
     $('ver').textContent = 'v' + (CFG.APP_VERSION || '1.0.0');
     renderCrew();
     renderVoltages();
@@ -892,7 +700,6 @@
     resetFl();
     drawNet();
     await drawOutbox();
-    drawRemind().catch(() => {});
     refreshLists(true);
     loadRecent();
     flush();

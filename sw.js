@@ -8,7 +8,7 @@
  * old copy. That is the one piece of housekeeping this file needs.
  */
 
-const CACHE = 'whereabouts-v5';
+const CACHE = 'whereabouts-v4';
 
 const SHELL = [
   './',
@@ -131,67 +131,4 @@ async function flushOutbox() {
 
 self.addEventListener('sync', (e) => {
   if (e.tag === 'flush-outbox') e.waitUntil(flushOutbox());
-});
-
-// ---------------------------------------------------------------- the chase-up
-
-/* The push that arrives carries no words at all - only a nudge. The names of people
- * who have not logged on are fetched from the API here, which keeps them off Google's
- * and Apple's servers and means the notification shows what is true at the moment the
- * phone looks, not when it was sent.
- *
- * A notification must be shown for every push received, or the browser eventually
- * stops delivering them, so every path below ends in showNotification - including the
- * one where the phone could not reach the API. */
-
-async function showChase() {
-  const fallback = {
-    title: 'Check your logon',
-    body: 'Tap to open the app and check who is logged on.',
-  };
-
-  let detail = fallback;
-  try {
-    const d = await idb();
-    const meta = await getAll(d, 'meta');
-    const auth = (meta.find((m) => m.k === 'auth') || {}).v;
-    if (auth && auth.token && auth.api) {
-      const res = await fetch(auth.api + '/api/chase', {
-        headers: { Authorization: 'Bearer ' + auth.token },
-      });
-      if (res.ok) {
-        const c = await res.json();
-        if (c.count === 0) return;          // sorted itself out between send and arrival
-        detail = { title: c.title, body: c.body };
-      }
-    }
-  } catch {
-    // No signal, or the token has been revoked. The fallback still gets somebody to
-    // open the app, which is the whole point.
-  }
-
-  return self.registration.showNotification(detail.title, {
-    body: detail.body,
-    icon: './icons/icon-192.png',
-    badge: './icons/icon-192.png',
-    tag: 'whereabouts-chase',             // a second nudge replaces the first
-    renotify: true,
-    requireInteraction: false,
-    data: { url: './' },
-  });
-}
-
-self.addEventListener('push', (e) => {
-  e.waitUntil(showChase());
-});
-
-self.addEventListener('notificationclick', (e) => {
-  e.notification.close();
-  e.waitUntil((async () => {
-    const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    for (const c of all) {
-      if (c.url.includes(self.registration.scope)) return c.focus();
-    }
-    return self.clients.openWindow((e.notification.data && e.notification.data.url) || './');
-  })());
 });

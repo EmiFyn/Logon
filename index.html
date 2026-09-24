@@ -48,12 +48,7 @@
 
   <form id="logon-form">
     <label for="work-date">Date</label>
-    <div class="daypick">
-      <button type="button" id="day-today" class="day">Today</button>
-      <button type="button" id="day-tomorrow" class="day">Tomorrow</button>
-      <input id="work-date" type="date" required>
-    </div>
-    <p class="hint" id="day-hint"></p>
+    <input id="work-date" type="date" required>
 
     <fieldset>
       <legend>Who is on site</legend>
@@ -87,13 +82,6 @@
   </form>
 
   <div id="outbox" class="outbox" hidden></div>
-
-  <section id="remind" class="remind" hidden>
-    <h2>Reminders</h2>
-    <p id="remind-state"></p>
-    <button type="button" class="small" id="remind-on">Remind this phone</button>
-    <button type="button" class="link" id="remind-off" hidden>Stop reminding this phone</button>
-  </section>
 
   <section id="recent">
     <h2>Recent logons from this phone</h2>

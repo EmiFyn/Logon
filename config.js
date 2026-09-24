@@ -7,6 +7,6 @@
  *   https://whereabouts.something.workers.dev
  */
 window.WA_CONFIG = {
-  API_BASE: 'https://whereabouts.oakwicklog.workers.dev',
+  API_BASE: 'https://whereabouts.oakwicklogin.workers.dev',
   APP_VERSION: '1.4.0',
 };
