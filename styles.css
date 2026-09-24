@@ -1,0 +1,231 @@
+/* Built for a phone held in one gloved hand at the side of a road: big targets,
+   high contrast, nothing that needs a precise tap. */
+
+:root {
+  --green: #1f5132;
+  --green-dark: #163a24;
+  --green-light: #e8f1ea;
+  --ink: #16201b;
+  --muted: #5d6b65;
+  --line: #ccd8d1;
+  --bg: #f4f7f5;
+  --red: #9d2c2c;
+  --amber: #8a5a10;
+  --radius: 10px;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 17px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+body { padding-bottom: env(safe-area-inset-bottom); }
+
+.view { max-width: 640px; margin: 0 auto; padding: 0 16px 40px; }
+
+/* ---------------------------------------------------------------- sign in */
+
+.brand { text-align: center; padding: 48px 0 8px; }
+.brand img { border-radius: 16px; }
+.brand h1 { font-size: 24px; margin: 14px 0 4px; }
+.brand .sub { color: var(--muted); margin: 0 0 24px; font-size: 15px; }
+
+/* ---------------------------------------------------------------- header */
+
+header {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--green); color: #fff;
+  margin: 0 -16px 16px; padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+}
+header strong { display: block; font-size: 16px; }
+header span { display: block; font-size: 13px; opacity: .85; }
+header .icon { margin-left: auto; background: none; border: 0; color: #fff;
+               font-size: 22px; padding: 4px 8px; }
+
+/* ---------------------------------------------------------------- forms */
+
+label, legend {
+  display: block; font-size: 14px; font-weight: 600;
+  color: var(--muted); margin: 18px 0 6px;
+}
+
+input, select, textarea {
+  width: 100%; font: inherit; padding: 13px 12px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: #fff; color: var(--ink);
+}
+input:focus, select:focus, textarea:focus {
+  outline: 3px solid #9ccfb0; outline-offset: 0; border-color: var(--green);
+}
+textarea { resize: vertical; }
+
+/* min-width:0 is not decoration. A fieldset defaults to min-width:min-content, so one
+   long no-wrap line inside it (a crew member's roles, phone and registration) pushes
+   the whole page wider than the phone and everything scrolls sideways. */
+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+
+.hint { color: var(--muted); font-size: 13px; margin: 6px 2px 0; min-height: 1em; }
+
+/* Crew list: whole row is the target, not a 20px checkbox. */
+.people { display: flex; flex-direction: column; gap: 8px; }
+
+.person {
+  display: flex; align-items: stretch; min-width: 0;
+  background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
+  overflow: hidden;
+}
+.person:has(input:checked) { background: var(--green-light); border-color: var(--green); }
+
+.person label {
+  display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;
+  margin: 0; padding: 12px 14px; font-weight: 500; color: var(--ink);
+}
+.person input[type="checkbox"] {
+  width: 22px; height: 22px; accent-color: var(--green); flex: none;
+}
+.person .who { min-width: 0; }
+.person .nm { display: block; font-size: 17px; }
+.person .sub {
+  display: block; font-size: 13px; font-weight: 400; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.person .sub.none { font-style: italic; }
+/* A lone worker reads differently from the rest of the list on purpose - it is the
+   reason the other names will vanish if this one is ticked. */
+.person.lone .sub b { color: var(--green); font-weight: 600; }
+.person.lone .sub { font-style: normal; }
+
+.person .edit {
+  flex: none; background: none; border: 0; border-left: 1px solid var(--line);
+  color: var(--green); font: inherit; font-size: 14px; padding: 0 16px;
+}
+.person .edit:active { background: var(--green-light); }
+
+.editor {
+  margin: -2px 0 2px; padding: 14px;
+  border: 1px solid var(--green); border-radius: var(--radius);
+  background: var(--green-light);
+}
+.editor label { margin-top: 0; }
+.editor label + input { margin-bottom: 10px; }
+.editor .hint { margin-bottom: 10px; }
+.editor-buttons { display: flex; align-items: center; gap: 10px; justify-content: flex-end; }
+button.small {
+  background: var(--green); color: #fff; border: 0; border-radius: var(--radius);
+  font: inherit; font-weight: 600; padding: 10px 20px;
+}
+
+/* Type-to-narrow list for functional locations. A plain dropdown is useless when a CMR
+   carries a few thousand of them. */
+.matches {
+  margin-top: 8px; max-height: 260px; overflow-y: auto;
+  border: 1px solid var(--line); border-radius: var(--radius); background: #fff;
+  -webkit-overflow-scrolling: touch;
+}
+.matches button {
+  display: block; width: 100%; text-align: left; font: inherit;
+  padding: 13px 14px; background: none; border: 0;
+  border-bottom: 1px solid var(--line); color: var(--ink);
+}
+.matches button:last-child { border-bottom: 0; }
+.matches button:active { background: var(--green-light); }
+.matches .none { padding: 13px 14px; color: var(--muted); font-size: 15px; }
+
+input[readonly] { background: var(--green-light); color: var(--muted); }
+
+/* Today / Tomorrow. A crew logging the next day's work at eight in the evening is the
+   normal case for standby and early starts, so it is two taps rather than a date
+   picker - and the day is written out in words underneath, because "24/09" on a phone
+   at dusk is exactly how somebody logs the wrong day. */
+.daypick { display: flex; gap: 8px; align-items: stretch; }
+.daypick .day {
+  flex: 0 0 auto; font: inherit; font-size: 15px; font-weight: 600;
+  padding: 0 14px; border-radius: var(--radius);
+  border: 1px solid var(--line); background: #fff; color: var(--green);
+}
+.daypick .day[aria-pressed="true"] {
+  background: var(--green); border-color: var(--green); color: #fff;
+}
+.daypick input { flex: 1 1 auto; min-width: 0; margin: 0; }
+.hint.ahead { color: var(--amber); font-weight: 600; }
+
+button.primary {
+  width: 100%; margin: 26px 0 0; padding: 16px;
+  background: var(--green); color: #fff; border: 0; border-radius: var(--radius);
+  font: inherit; font-size: 18px; font-weight: 600;
+}
+button.primary:disabled { opacity: .55; }
+button.primary:active { background: var(--green-dark); }
+
+button.link {
+  background: none; border: 0; color: var(--green); font: inherit; font-size: 15px;
+  padding: 10px 2px; text-decoration: underline; text-underline-offset: 3px;
+}
+button.link.danger { color: var(--red); }
+
+/* ---------------------------------------------------------------- status */
+
+.banner {
+  margin: 0 0 14px; padding: 11px 14px; border-radius: var(--radius);
+  font-size: 15px; background: #fdf3e3; color: var(--amber);
+  border: 1px solid #e8d3a8;
+}
+.banner.bad { background: #fbeaea; color: var(--red); border-color: #e9c2c2; }
+
+.outbox {
+  margin: 20px 0 0; padding: 12px 14px; border-radius: var(--radius);
+  background: #fdf3e3; border: 1px solid #e8d3a8; color: var(--amber); font-size: 15px;
+}
+
+.remind { margin-top: 30px; }
+.remind h2 { font-size: 14px; color: var(--muted); text-transform: uppercase;
+             letter-spacing: .04em; margin-bottom: 8px; }
+.remind p { margin: 0 0 10px; font-size: 15px; color: var(--muted); }
+.remind p.on { color: var(--green); font-weight: 600; }
+
+#recent { margin-top: 30px; }
+#recent h2 { font-size: 14px; color: var(--muted); text-transform: uppercase;
+             letter-spacing: .04em; margin-bottom: 8px; }
+#recent ul { list-style: none; margin: 0; padding: 0; }
+#recent li {
+  background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 11px 13px; margin-bottom: 8px; font-size: 15px;
+}
+#recent li .when { color: var(--muted); font-size: 13px; }
+
+footer {
+  margin-top: 30px; padding-top: 14px; border-top: 1px solid var(--line);
+  display: flex; align-items: center; gap: 16px;
+}
+footer .ver { margin-left: auto; color: var(--muted); font-size: 12px; }
+
+.msg { padding: 12px 14px; border-radius: var(--radius); margin: 16px 0; font-size: 15px; }
+.msg.err { background: #fbeaea; color: var(--red); }
+.msg.ok  { background: var(--green-light); color: var(--green-dark); }
+
+#toast {
+  position: fixed; left: 16px; right: 16px; bottom: calc(20px + env(safe-area-inset-bottom));
+  max-width: 608px; margin: 0 auto;
+  background: var(--green-dark); color: #fff; padding: 14px 16px;
+  border-radius: var(--radius); font-size: 16px; text-align: center; z-index: 50;
+}
+#toast.bad { background: var(--red); }
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e8efea; --muted: #9db0a6; --line: #32403a; --bg: #101713;
+    --green-light: #1c3327;
+  }
+  input, select, textarea, .person, #recent li, .matches { background: #18241e; }
+  .person.lone .sub b { color: #7fc79b; }
+  .editor input { background: #101713; }
+  .matches button { color: var(--ink); }
+  input[readonly] { background: #1c3327; }
+  .banner, .outbox { background: #2c2415; border-color: #4a3d20; color: #e0c184; }
+  .banner.bad, .msg.err { background: #331a1a; border-color: #5a2a2a; color: #f0a7a7; }
+  .msg.ok { background: #1c3327; color: #a9dcbd; }
+}
