@@ -32,6 +32,18 @@
     <button class="primary" id="login-go" type="submit">Sign in</button>
   </form>
   <div id="login-msg"></div>
+
+  <!-- Which server this phone is talking to. Hidden until something goes wrong, and
+       then the first thing anyone needs: the address is otherwise invisible, and a
+       phone with a stale or mistyped one says only "Failed to fetch". -->
+  <details id="login-where">
+    <summary>Trouble signing in?</summary>
+    <p>This app is talking to:</p>
+    <p class="addr" id="login-api"></p>
+    <p id="login-build"></p>
+    <p>Read that back to the office. If it is not their address, they can correct it
+       and this phone will pick it up next time it is opened with signal.</p>
+  </details>
 </div>
 
 <!-- ----------------------------------------------------------------- main -->
@@ -80,6 +92,12 @@
     <label for="work-type">Work type</label>
     <select id="work-type"></select>
 
+    <div id="detail-wrap" hidden>
+      <label for="work-detail" id="detail-label">Live or shutdown</label>
+      <select id="work-detail"></select>
+      <p class="hint" id="detail-hint"></p>
+    </div>
+
     <label for="notes">Anything else</label>
     <textarea id="notes" rows="3" placeholder="Optional"></textarea>
 
@@ -91,8 +109,6 @@
   <section id="remind" class="remind" hidden>
     <h2>Reminders</h2>
     <p id="remind-state"></p>
-    <button type="button" class="small" id="remind-on">Remind this phone</button>
-    <button type="button" class="link" id="remind-off" hidden>Stop reminding this phone</button>
   </section>
 
   <section id="recent">
@@ -105,6 +121,17 @@
     <button class="link danger" id="signout">Sign out</button>
     <span class="ver" id="ver"></span>
   </footer>
+</div>
+
+<!-- The live-working reminder. A dialog rather than a toast because a toast slides
+     away whether or not anybody read it, and the entire point of this one is that
+     somebody did. -->
+<div id="remind-overlay" class="overlay" hidden>
+  <div class="sheet" role="alertdialog" aria-modal="true" aria-labelledby="remind-title">
+    <h2 id="remind-title">Before you go on</h2>
+    <p id="remind-text"></p>
+    <button type="button" class="primary" id="remind-ok">Understood</button>
+  </div>
 </div>
 
 <div id="toast" hidden></div>

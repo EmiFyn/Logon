@@ -8,18 +8,29 @@
  * old copy. That is the one piece of housekeeping this file needs.
  */
 
-const CACHE = 'whereabouts-v6';
+const CACHE = 'whereabouts-v8';
 
 const SHELL = [
   './',
   './index.html',
   './styles.css',
   './app.js',
-  './config.js',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',
 ];
+
+/* config.js is deliberately NOT in that list.
+ *
+ * It holds the address of the Worker, and it is the one file in the app that belongs
+ * to the installation rather than to the version. Caching it the way everything else
+ * is cached - keep the copy, use it, refresh it quietly for next time - cost a working
+ * setup two days: the address was corrected at the office and published, and every
+ * handset carried on using the copy it already had, saying only "Failed to fetch".
+ *
+ * So this one is fetched fresh every time there is signal, and the cached copy is used
+ * only when there is none. It is two hundred bytes. Nothing is saved by keeping it and
+ * a great deal can be lost. */
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
@@ -42,6 +53,33 @@ self.addEventListener('fetch', (e) => {
   if (url.pathname.startsWith('/api/')) return;
   if (e.request.method !== 'GET') return;
   if (url.origin !== self.location.origin) return;
+
+  // The server's address: always from the network when there is one. 'no-store' is
+  // there because the browser keeps its own copy for ten minutes as well, and a
+  // correction published at the office should reach a handset on its next load, not
+  // at some point later in the morning.
+  if (url.pathname.endsWith('/config.js')) {
+    // A unique address every time. `cache: 'no-store'` on its own is not enough: the
+    // file is served with a ten-minute freshness header, and the browser's own cache
+    // answered from it - so a correction published at the office still took until the
+    // header expired to reach a handset. A query string nothing has seen before cannot
+    // be answered from any cache.
+    //
+    // The copy is stored under the ORIGINAL address, so the offline fallback below
+    // finds it whatever the query string was at the time.
+    const fresh = new Request(url.pathname + '?_=' + Date.now(), { cache: 'no-store' });
+    e.respondWith(
+      fetch(fresh)
+        .then((res) => {
+          if (!res.ok) throw new Error('not ok');
+          const copy = res.clone();
+          e.waitUntil(caches.open(CACHE).then((c) => c.put(e.request, copy)));
+          return res;
+        })
+        .catch(() => caches.match(e.request).then((hit) => hit || Response.error())),
+    );
+    return;
+  }
 
   e.respondWith(
     caches.match(e.request).then((hit) => {

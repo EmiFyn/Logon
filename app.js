@@ -18,10 +18,13 @@
   // your Worker and nothing else, so that replacing the project files can never
   // overwrite it - which is exactly how a working installation once ended up pointed
   // at a hostname that did not exist.
-  const APP_VERSION = '1.4.1';
+  const APP_VERSION = '1.5.0';
 
   const CFG = window.WA_CONFIG || {};
-  const API = (CFG.API_BASE || '').replace(/\/+$/, '');
+
+  // Not const. The address can be corrected by the office while a handset still holds
+  // the old one, and the phone has to be able to pick that up - see refreshAddress().
+  let API = (CFG.API_BASE || '').replace(/\/+$/, '');
 
   const KEY_TOKEN = 'wa.token';
   const KEY_USER = 'wa.user';
@@ -191,6 +194,42 @@
   }
 
   /**
+   * Re-read the server's address, past every cache between here and the office.
+   *
+   * config.js is a normal file on a normal web server, which means two caches can
+   * answer for it: the service worker's, and the browser's own. Both did. When the
+   * address was corrected and published, handsets carried on using the copy they had
+   * and said only "Failed to fetch" - for two days, on a one-letter typo.
+   *
+   * The service worker no longer keeps it. This deals with the other one: a URL with
+   * a timestamp on it has never been seen by any cache, so the answer can only have
+   * come from the server. It runs in the background at startup, so it costs the crew
+   * nothing, and it is deliberately quiet - if the address has not changed, which is
+   * almost always, nothing happens at all.
+   */
+  async function refreshAddress() {
+    try {
+      const res = await fetch('config.js?_=' + Date.now(), { cache: 'no-store' });
+      if (!res.ok) return;
+      const text = await res.text();
+      const m = /API_BASE\s*:\s*['"]([^'"]+)['"]/.exec(text);
+      if (!m) return;
+      const fresh = m[1].replace(/\/+$/, '');
+      if (!fresh || fresh === API) return;
+
+      API = fresh;
+      const box = $('login-api');
+      if (box) box.textContent = API;
+      // Worth saying out loud: somebody at the office has just fixed something, and
+      // the crew should know why it started working.
+      toast('The office has corrected the server address');
+    } catch {
+      // No signal. The address already loaded is the best available, which is exactly
+      // what the cached copy is for.
+    }
+  }
+
+  /**
    * fetch, with a failure message somebody could act on.
    *
    * A fetch that never reaches the server rejects with "Failed to fetch" and nothing
@@ -239,13 +278,21 @@
 
   // ------------------------------------------------------------------ reminders
   //
-  // If the crew has not logged on by the time the office sets, the handset buzzes. It
-  // is opt-in per phone and per person: a notification nobody asked for is the fastest
-  // way to have every crew turn notifications off for good.
+  // If the crew has not logged on by the time the office sets, the handset buzzes.
   //
-  // The awkward part is iPhones. Safari only allows this once the app has been added
-  // to the Home Screen, and there is no way to ask for that on the user's behalf - so
-  // the honest thing is to say so plainly rather than show a button that does nothing.
+  // There is no switch for this. It was an opt-in to begin with, on the reasoning that
+  // a notification nobody asked for is the fastest way to have every crew turn
+  // notifications off for good - but an opt-in that nobody finds is a feature that
+  // does not exist, and this one is a safety net rather than a convenience.
+  //
+  // So it is asked for once, on the first tap after signing in, and never mentioned
+  // again. It cannot be asked for without a tap: both Chrome and Safari refuse to show
+  // the phone's own "Allow notifications?" prompt unless the person has just done
+  // something. That is the browser's rule and there is no way round it.
+  //
+  // The awkward part is iPhones. Safari only allows any of this once the app has been
+  // added to the Home Screen, and there is no way to ask for that on somebody's
+  // behalf - so the app says so plainly rather than failing quietly.
 
   const pushSupported = () => 'serviceWorker' in navigator
     && 'PushManager' in window && 'Notification' in window;
@@ -268,48 +315,61 @@
     return reg.pushManager.getSubscription();
   }
 
+  /** Say something only when there is something the crew can act on. */
   async function drawRemind() {
     const box = $('remind');
     const state = $('remind-state');
-    const on = $('remind-on');
-    const off = $('remind-off');
-    box.hidden = false;
+    if (!box) return;
 
-    if (!pushSupported() || (isIOS() && !onHomeScreen())) {
-      on.hidden = true;
-      off.hidden = true;
+    if (isIOS() && !onHomeScreen()) {
+      box.hidden = false;
       state.classList.remove('on');
-      state.textContent = isIOS()
-        ? 'To get a reminder on an iPhone, the app has to be added to the Home Screen '
-          + 'first: tap Share, then "Add to Home Screen", and open it from there.'
-        : 'This phone cannot show reminders.';
+      state.textContent = 'Add this app to the Home Screen (tap Share, then "Add to '
+        + 'Home Screen") and open it from there, or the phone will not be able to '
+        + 'remind you if your crew has not logged on.';
       return;
     }
 
-    const sub = await currentSub();
-    if (sub && Notification.permission === 'granted') {
-      state.classList.add('on');
-      state.textContent = 'This phone will buzz if your crew has not logged on by the '
-        + 'time the office has set.';
-      on.hidden = true;
-      off.hidden = false;
+    if (pushSupported() && Notification.permission === 'denied') {
+      box.hidden = false;
+      state.classList.remove('on');
+      state.textContent = 'Notifications are blocked for this app in the phone\'s '
+        + 'settings, so it cannot remind you if your crew has not logged on. Only this '
+        + 'phone can turn them back on.';
       return;
     }
 
-    state.classList.remove('on');
-    on.hidden = false;
-    off.hidden = true;
-    state.textContent = Notification.permission === 'denied'
-      ? 'Reminders are blocked for this app in the phone\'s settings. Turning them back '
-        + 'on there is the only way to change it.'
-      : 'Get a reminder if your crew has not logged on by the time the office has set.';
-    on.disabled = Notification.permission === 'denied';
+    // Working as intended, or nothing to be done about it. Either way, silence.
+    box.hidden = true;
   }
 
-  async function remindOn() {
+  /**
+   * Ask once, then subscribe. Called from the first tap after sign-in, because the
+   * browser will not show its prompt without one.
+   */
+  let asked = false;
+  async function ensureReminders() {
+    if (asked || !pushSupported()) return;
+    if (isIOS() && !onHomeScreen()) return;
+    asked = true;
+
     try {
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') { await drawRemind(); return; }
+      if (Notification.permission === 'default') {
+        await Notification.requestPermission();
+      }
+      if (Notification.permission !== 'granted') { await drawRemind(); return; }
+
+      // Already subscribed on this handset - nothing to do, and no message either.
+      const existing = await currentSub();
+      if (existing) {
+        await api('/api/push/subscribe', {
+          method: 'POST',
+          body: JSON.stringify({ endpoint: existing.endpoint,
+                                 label: navigator.platform || 'Phone' }),
+        }).catch(() => {});
+        await drawRemind();
+        return;
+      }
 
       const { key } = await api('/api/push/key');
       const reg = await navigator.serviceWorker.ready;
@@ -319,27 +379,13 @@
       });
       await api('/api/push/subscribe', {
         method: 'POST',
-        body: JSON.stringify({ endpoint: sub.endpoint, label: navigator.platform || 'Phone' }),
+        body: JSON.stringify({ endpoint: sub.endpoint,
+                               label: navigator.platform || 'Phone' }),
       });
-      toast('This phone will be reminded');
-    } catch (e) {
-      toast(e.message || 'Could not turn reminders on', true);
-    }
-    await drawRemind();
-  }
-
-  async function remindOff() {
-    try {
-      const sub = await currentSub();
-      if (sub) {
-        await api('/api/push/unsubscribe', {
-          method: 'POST', body: JSON.stringify({ endpoint: sub.endpoint }),
-        }).catch(() => {});
-        await sub.unsubscribe();
-      }
-      toast('Reminders off for this phone');
     } catch {
-      toast('Could not turn reminders off', true);
+      // No signal, or the phone refused. Neither is worth interrupting a crew over;
+      // the office can see who is reachable on the Reports tab.
+      asked = false;
     }
     await drawRemind();
   }
@@ -373,6 +419,18 @@
   }
 
   // ------------------------------------------------------------------ sign in
+
+  // Put the address on the screen at startup. It is collapsed, so it costs a crew
+  // nothing, and it is there the moment anybody asks "which server is it using?" -
+  // a question that previously had no answer short of reading files on the phone.
+  refreshAddress();
+
+  (function showWhere() {
+    const api = $('login-api');
+    if (api) api.textContent = API || '(no address set at all)';
+    const build = $('login-build');
+    if (build) build.textContent = 'App version ' + APP_VERSION + '.';
+  }());
 
   $('login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -410,6 +468,9 @@
       await afterSignIn();
     } catch (err) {
       $('login-msg').innerHTML = '<div class="msg err">' + esc(err.message) + '</div>';
+      // A failure is exactly when the address matters, so stop hiding it.
+      const where = $('login-where');
+      if (where) where.open = true;
     } finally {
       btn.disabled = false;
       btn.textContent = 'Sign in';
@@ -614,12 +675,84 @@
     if (b) openEditor(b.dataset.edit);
   });
 
+  /**
+   * A work type is an object now - a name, and sometimes a list of options the crew
+   * must choose from once they have picked it. Older phones stored plain strings, and
+   * a phone that has not refreshed since the update still has them, so both shapes
+   * have to read the same way here.
+   */
+  const typeName = (w) => (typeof w === 'string' ? w : (w && w.name) || '');
+  const typeFor = (name) => lists.work_types
+    .map((w) => (typeof w === 'string' ? { name: w, options: [] } : w))
+    .find((w) => w.name === name) || null;
+
   function renderWorkTypes() {
     const wt = $('work-type');
     const keep = wt.value;
     wt.innerHTML = '<option value="">Choose...</option>' +
-      lists.work_types.map((w) => '<option>' + esc(w) + '</option>').join('');
+      lists.work_types.map((w) => '<option>' + esc(typeName(w)) + '</option>').join('');
     if (keep) wt.value = keep;
+    renderWorkDetail();
+  }
+
+  /**
+   * The second dropdown: Live or Shutdown on cutting, and whatever the office adds
+   * later on anything else. Hidden entirely when the chosen work type has no options,
+   * which is most of them.
+   */
+  function renderWorkDetail() {
+    const wrap = $('detail-wrap');
+    const sel = $('work-detail');
+    const type = typeFor($('work-type').value);
+    const options = (type && type.options) || [];
+
+    if (!options.length) {
+      wrap.hidden = true;
+      sel.innerHTML = '';
+      $('detail-hint').textContent = '';
+      $('detail-hint').classList.remove('warn');
+      return;
+    }
+
+    const keep = sel.value;
+    wrap.hidden = false;
+    $('detail-label').textContent = options.join(' or ');
+    sel.innerHTML = '<option value="">Choose...</option>' +
+      options.map((o) => '<option>' + esc(o) + '</option>').join('');
+    if (keep && options.includes(keep)) sel.value = keep;
+    drawDetailHint();
+  }
+
+  function drawDetailHint() {
+    const type = typeFor($('work-type').value);
+    const hint = $('detail-hint');
+    const chosen = $('work-detail').value;
+    const warns = !!(type && type.warn_option && chosen
+                     && chosen.toLowerCase() === type.warn_option.toLowerCase());
+    hint.textContent = warns ? (type.warn_text || '') : '';
+    hint.classList.toggle('warn', warns);
+  }
+
+  /**
+   * Hold the crew up until they have acknowledged something.
+   *
+   * A toast would slide away whether or not anybody read it. This one has to be
+   * tapped, because the whole reason it exists is to be sure somebody saw it before
+   * they went on to a live circuit.
+   */
+  function insist(text) {
+    return new Promise((resolve) => {
+      $('remind-text').textContent = text;
+      $('remind-overlay').hidden = false;
+      const ok = $('remind-ok');
+      const done = () => {
+        ok.removeEventListener('click', done);
+        $('remind-overlay').hidden = true;
+        resolve();
+      };
+      ok.addEventListener('click', done);
+      ok.focus();
+    });
   }
 
   // ------------------------------------------------------------------ the cascade
@@ -749,8 +882,22 @@
     return hit && hit.area ? hit.area : '';
   }
 
-  $('remind-on').addEventListener('click', remindOn);
-  $('remind-off').addEventListener('click', remindOff);
+  // The first tap anywhere in the form is what lets the browser show its own prompt.
+  // Once is enough - ensureReminders() does nothing on every tap after it.
+  $('view-main').addEventListener('pointerdown', () => { ensureReminders(); },
+    { once: true });
+
+  $('work-type').addEventListener('change', renderWorkDetail);
+  $('work-detail').addEventListener('change', async () => {
+    drawDetailHint();
+    const type = typeFor($('work-type').value);
+    const chosen = $('work-detail').value;
+    if (type && type.warn_option && chosen
+        && chosen.toLowerCase() === type.warn_option.toLowerCase()) {
+      await insist(type.warn_text
+        || 'Remember to log on with control as well.');
+    }
+  });
 
   $('day-today').addEventListener('click', () => setDay(dayOffset(0)));
   $('day-tomorrow').addEventListener('click', () => setDay(dayOffset(1)));
@@ -774,6 +921,13 @@
     if (!people.length) { toast('Tick at least one person', true); return; }
     if (!$('work-type').value) { toast('Choose a work type', true); return; }
 
+    const chosenType = typeFor($('work-type').value);
+    const needsDetail = !!(chosenType && (chosenType.options || []).length);
+    if (needsDetail && !$('work-detail').value) {
+      toast('Choose ' + (chosenType.options || []).join(' or '), true);
+      return;
+    }
+
     const chosen = $('work-date').value;
     if (!chosen) { toast('Pick the day this is for', true); return; }
     if (chosen > dayOffset(1)) {
@@ -789,6 +943,7 @@
       functional_location: $('fl').value.trim().toUpperCase(),
       area: $('area').value || areaForCmr(),
       work_type: $('work-type').value,
+      work_detail: needsDetail ? $('work-detail').value : '',
       notes: $('notes').value.trim(),
       people,
       created_at: new Date().toISOString(),

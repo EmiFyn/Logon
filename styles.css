@@ -137,10 +137,45 @@ button.small {
 
 input[readonly] { background: var(--green-light); color: var(--muted); }
 
+/* The "trouble signing in?" panel. Quiet until somebody needs it. */
+#login-where { margin-top: 22px; font-size: 14px; color: var(--muted); }
+#login-where summary { cursor: pointer; padding: 6px 0; color: var(--green);
+                       text-decoration: underline; text-underline-offset: 3px; }
+#login-where p { margin: 8px 0; }
+#login-where .addr {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 13px; word-break: break-all; color: var(--ink);
+  background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 9px 11px;
+}
+
 /* Today / Tomorrow. A crew logging the next day's work at eight in the evening is the
    normal case for standby and early starts, so it is two taps rather than a date
    picker - and the day is written out in words underneath, because "24/09" on a phone
    at dusk is exactly how somebody logs the wrong day. */
+/* The reminder that comes up when a crew says they are working live. It is a
+   dialog rather than a toast on purpose: a toast slides away whether or not anybody
+   read it, and the whole point of this one is that somebody did. */
+#detail-hint.warn { color: var(--red); font-weight: 600; }
+
+/* `display: flex` here would beat the browser's own rule for [hidden], leaving an
+   invisible sheet of glass over the whole app that swallows every tap. It did exactly
+   that, and the only reason it is not on somebody's phone is that a test could not
+   press Sign in. Hence :not([hidden]). */
+.overlay[hidden] { display: none; }
+.overlay:not([hidden]) {
+  position: fixed; inset: 0; z-index: 50; display: flex; align-items: center;
+  justify-content: center; padding: 20px; background: rgba(22, 32, 27, .55);
+}
+.sheet {
+  width: 100%; max-width: 420px; background: #fff; border-radius: 14px;
+  padding: 22px 20px calc(20px + env(safe-area-inset-bottom));
+  border-top: 6px solid var(--red);
+}
+.sheet h2 { margin: 0 0 10px; font-size: 20px; color: var(--red); }
+.sheet p { margin: 0; font-size: 17px; line-height: 1.5; }
+.sheet button.primary { margin-top: 22px; }
+
 .daypick { display: flex; gap: 8px; align-items: stretch; }
 .daypick .day {
   flex: 0 0 auto; font: inherit; font-size: 15px; font-weight: 600;
